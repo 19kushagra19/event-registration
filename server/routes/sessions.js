@@ -2,7 +2,7 @@ const express = require('express');
 const db = require('../db');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
-const { activeCount } = require('../utils/lifecycle');
+const { activeCount, expireStale } = require('../utils/lifecycle');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -13,6 +13,7 @@ function withCounts(row) {
 
 // A session's own detail, including live seat counts.
 router.get('/:id', (req, res) => {
+  expireStale(); // so seat counts shown here can never be stale relative to the hold window
   const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   res.json({ session: withCounts(session) });
