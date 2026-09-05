@@ -63,3 +63,44 @@ I added `expireStale()` before capacity-sensitive reads and writes, plus a backg
 ## What I learned
 
 AI was most useful for narrowing down environment and deployment errors and for explaining unfamiliar configuration steps. I still tested locally, read the code paths involved, and made the final choices about the deployed configuration and scope.
+
+## Post-submission enhancements: hash-chained audit trail, QR check-in, test suite
+
+### What I asked for
+
+After the initial submission, I asked for a review of my remaining priorities (tests, docs,
+stretch goals), then asked for further technical additions that would stand out to a reviewer,
+ranked by impact vs effort against my actual codebase. I picked the hash-chained audit trail, QR
+door-mode check-in, and a real automated test suite, and asked for all three plus doc updates to
+be built against my real `server/` and `public/` source (uploaded as a zip) rather than guessed
+from my docs alone.
+
+### What I got
+
+- A hash-chaining design for `registration_history` (`server/utils/history.js`): each row's SHA-256
+  hash commits to its own content plus the previous row's hash, per registration, with a
+  `GET /api/registrations/:id/verify` endpoint to walk the chain and report exactly which row
+  broke and why.
+- A signed, expiring HMAC token design for QR check-in (`server/utils/qrToken.js`,
+  `server/routes/checkin.js`) rather than encoding a bare registration id, plus reuse of my
+  existing `ALLOWED_TRANSITIONS` state machine via a shared `applyTransition` helper instead of a
+  parallel check-in code path.
+- 16 automated tests (`tests/`) using Node's built-in `node:test` and native `fetch` — no new test
+  framework dependency — covering the concurrent double-reservation race described in my own
+  README's problem statement, full lifecycle transitions and auto-expiry, staff/organizer
+  permission boundaries, the CSV import Decision 6 regression, and hash-chain tamper detection.
+- A refactor splitting `server/index.js` into `server/app.js` (the testable Express app) and a thin
+  entrypoint, so tests don't need to bind a real network port.
+- A frontend "Show QR" button and audit-verify control on the registration detail page, plus a
+  `#/checkin/:token` door-mode page that a scanned QR code opens directly and auto-submits.
+
+### What I did and verified
+
+I ran `npm test` myself after every change and confirmed all 16 tests pass. I manually smoke-tested
+the QR flow end-to-end on a local server: generated a QR code, decoded the image back to a URL,
+submitted it to the scan endpoint, confirmed the registration moved to `CheckedIn`, and confirmed a
+second scan of the same code returns `alreadyCheckedIn: true` instead of erroring or double-processing.
+I also manually tampered with rows in `registration_history` (editing a note, deleting a row) directly
+against the database and confirmed `/verify` correctly reported the tampering. After pushing to GitHub,
+I re-verified both the `/verify` and `/qrcode` endpoints against my live Render deployment to confirm
+the deployed code — not just my local copy — reflected these changes.

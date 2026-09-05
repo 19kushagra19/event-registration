@@ -76,3 +76,38 @@
   duplicate) later in the file, which the reviewer would have no visibility into. Now every row is
   always evaluated and reported, even after the session fills — later rows just report `rejected:
   session is at capacity` instead of being skipped.
+
+## Decision 7
+
+- **Chose:** Make the "history can't be rewritten" guarantee (goal #9) verifiable instead of just
+  policy-enforced, by hash-chaining every `registration_history` row to the one before it
+  (`server/utils/history.js`) and exposing `GET /api/registrations/:id/verify` to walk the chain
+  and recompute every hash.
+- **Rejected:** Leaving the guarantee as "no route in this codebase issues UPDATE/DELETE against
+  this table," which is true but unverifiable from outside the code — a reviewer (or a future
+  contributor) has to trust that claim rather than being able to check it.
+- **Why:** A hash chain turns a promise about the codebase into a property of the data itself.
+  Each row's hash commits to its own content (`registration_id`, `old_status`, `new_status`,
+  `changed_by`, `note`, `changed_at`) plus the previous row's hash — the same construction as a
+  Git commit chain. Editing any field in any row, or deleting a row outright, breaks every hash
+  computed after it, which `/verify` detects and reports (including which row and why: an edited
+  row fails its own hash check, a deleted row breaks the next row's `prev_hash` reference). This
+  is intentionally per-registration rather than one global chain across all registrations, so
+  unrelated registrations' timelines don't contend with each other and a chain break in one
+  registration's history doesn't implicate any other registration's data.
+
+## Decision 8
+
+- **Chose:** QR check-in codes encode a signed, expiring HMAC token
+  (`registrationId.expiresAt.signature`, `server/utils/qrToken.js`) rather than the bare
+  registration id.
+- **Rejected:** Encoding the registration id directly (e.g. as a URL like `/checkin/42`).
+- **Why:** Registration ids are small sequential auto-increment integers. A bare-id QR code would
+  let anyone standing at the door guess or increment ids to check in attendees who never showed
+  up, without ever having scanned their actual code. Signing the payload with a server-side secret
+  (`crypto.createHmac`, compared with `timingSafeEqual` to avoid timing attacks on the comparison
+  itself) means a token can't be forged or guessed, and the built-in expiry (12h by default) means
+  a screenshotted QR code from a past event can't be replayed indefinitely. The check-in scan
+  endpoint (`POST /api/checkin/scan`) reuses the exact same `ALLOWED_TRANSITIONS` state machine as
+  the manual status-change endpoint via a shared `applyTransition` helper, rather than a parallel
+  path that could drift out of sync with the rules documented in Decision 4.

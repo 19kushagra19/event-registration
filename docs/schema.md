@@ -28,8 +28,12 @@ Indexed on `session_id`, `status`, `attendee_email`.
 
 **registration_history** — `id` PK, `registration_id` INTEGER NOT NULL FK → registrations(id)
 ON DELETE CASCADE, `old_status` TEXT NULL, `new_status` TEXT NOT NULL, `changed_by` TEXT NULL
-(email of the actor, or `'system'` for auto-expiry), `note` TEXT NULL, `changed_at` TEXT.
-Append-only: no route ever issues an UPDATE or DELETE against this table.
+(email of the actor, or `'system'` for auto-expiry), `note` TEXT NULL, `changed_at` TEXT,
+`prev_hash` TEXT NULL, `hash` TEXT NOT NULL-in-practice (SHA-256 hex, computed by
+`server/utils/history.js`). Append-only: no route ever issues an UPDATE or DELETE against this
+table. `prev_hash`/`hash` chain each row to the one before it *for that registration* — see
+`docs/decisions.md` Decision 7 — so `GET /api/registrations/:id/verify` can prove the chain hasn't
+been altered, not just assert it by convention.
 
 **dismissed_alerts** — `session_id` INTEGER PK, FK → sessions(id) ON DELETE CASCADE,
 `dismissed_at` TEXT NOT NULL default now, `dismissed_generation` INTEGER NOT NULL DEFAULT 0.

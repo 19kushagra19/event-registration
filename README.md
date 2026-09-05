@@ -21,6 +21,7 @@ write-up and `SUBMISSION.md` for links/credentials/checklist).
 - [Environment variables](#environment-variables)
 - [API reference](#api-reference)
 - [Deploying it](#deploying-it)
+- [Testing](#testing)
 - [Known limitations](#known-limitations)
 - [Troubleshooting](#troubleshooting)
 
@@ -307,12 +308,30 @@ deploy — no separate frontend host needed. Rough steps for a free-tier host li
    `server/db.js` for a hosted Postgres — every query already goes through parameterised
    `db.prepare()` calls, so only the driver needs to change, not the query logic.
 
+## Testing
+
+`npm test` runs the automated suite (Node's built-in `node --test`, no extra test framework
+dependency). 16 tests across 5 files:
+
+- `tests/capacity-race.test.js` — fires concurrent reservation requests at a session with one
+  seat left and asserts exactly one wins with a 409 on the other; the exact failure mode this
+  README opens with.
+- `tests/lifecycle.test.js` — every legal/illegal status transition, and auto-expiry of a
+  back-dated stale reservation freeing its seat.
+- `tests/permissions.test.js` — staff vs organizer boundaries, including the role-check vs
+  assignment-check distinction on CSV import.
+- `tests/csv-import.test.js` — the Decision 6 regression: rows after a session fills mid-file are
+  still evaluated and reported, not silently skipped.
+- `tests/history-chain.test.js` — the hash-chained audit trail (Decision 7) detects both edited
+  and deleted history rows.
+
+Each test file gets its own throwaway SQLite file and its own ephemeral-port server instance
+(`tests/helpers.js`), so they don't share state and can run safely in any order.
+
 ## Known limitations
 
-- No automated test suite — verification of the lifecycle/capacity/expiry logic was manual code
-  reading, not tests. Flagged honestly in `SUBMISSION.md` as the weakest part of the codebase.
-- No email/notifications, no waitlist, no QR check-in — all on the brief's optional stretch list,
-  not attempted, in favor of getting the required ten goals solid.
+- No email/notifications or waitlist — on the brief's optional stretch list, not attempted, in
+  favor of getting the required ten goals solid plus the audit-trail/QR/testing additions above.
 - SQLite's single-writer model means heavy concurrent writes (many check-in staff hitting the
   same event simultaneously, at 100x current scale) would eventually bottleneck — see
   `docs/schema.md` for the specifics and the Postgres migration path.

@@ -338,10 +338,19 @@ function wireRegistrationActions(container) {
 async function viewRegistrationDetail(id) {
   const d = await api(`/registrations/${id}`);
   const r = d.registration;
+  const canCheckIn = ['Reserved', 'Confirmed'].includes(r.status);
   const c = el(`<div>
     <a href="#/registrations" class="small">&larr; Back to search</a>
     <h2>${esc(r.attendee_name)}</h2>
     <p class="muted">${esc(r.attendee_email)} · <span class="pill ${r.status}">${r.status}</span></p>
+    <div class="card">
+      <h3>Door check-in</h3>
+      ${canCheckIn
+        ? `<p class="small muted">Show this QR code at the door. Scanning it fast-tracks the attendee straight to Checked In.</p>
+           <img id="qr-img" alt="Check-in QR code" style="width:220px;height:220px;border:1px solid var(--border);border-radius:6px" />
+           <div style="margin-top:8px"><a id="qr-download" download="registration-${r.id}-qr.png"><button class="secondary">Download QR</button></a></div>`
+        : `<p class="small muted">A check-in QR code isn't available once a registration is ${esc(r.status)}.</p>`}
+    </div>
     <div class="card">
       <h3>Timeline</h3>
       ${d.history.map(h => `<div class="timeline-item">
@@ -349,6 +358,10 @@ async function viewRegistrationDetail(id) {
         ${h.note ? `<div class="small muted">${esc(h.note)}</div>` : ''}
         <div class="small muted">${fmt(h.changed_at)}</div>
       </div>`).join('')}
+      <div style="margin-top:10px">
+        <button class="secondary small" id="verify-btn">Verify audit trail</button>
+        <span class="small" id="verify-result"></span>
+      </div>
     </div>
     <div class="card">
       <h3>Add a note</h3>
@@ -360,6 +373,49 @@ async function viewRegistrationDetail(id) {
     await api(`/registrations/${id}/notes`, { method: 'POST', body: { note: c.querySelector('#note-text').value } });
     render();
   };
+  if (canCheckIn) {
+    const qrUrl = `/api/registrations/${id}/qrcode?_=${Date.now()}`;
+    c.querySelector('#qr-img').src = qrUrl;
+    c.querySelector('#qr-download').href = qrUrl;
+  }
+  c.querySelector('#verify-btn').onclick = async () => {
+    const out = c.querySelector('#verify-result');
+    out.textContent = 'Checking…';
+    try {
+      const result = await api(`/registrations/${id}/verify`);
+      if (result.valid) {
+        out.textContent = `✓ Audit trail intact (${result.checked} entries verified)`;
+        out.className = 'small';
+      } else {
+        out.textContent = `✗ Tampering detected: ${result.reason}`;
+        out.className = 'small error';
+      }
+    } catch (e) {
+      out.textContent = `Error: ${e.message}`;
+      out.className = 'small error';
+    }
+  };
+  return c;
+}
+
+// ---------------- Door-mode check-in (QR scan target) ----------------
+async function viewCheckin(token) {
+  const c = el(`<div>
+    <h2>Door check-in</h2>
+    <div class="card" id="checkin-result"><p class="muted">Checking in…</p></div>
+  </div>`);
+  try {
+    const result = await api('/checkin/scan', { method: 'POST', body: { token } });
+    const r = result.registration;
+    c.querySelector('#checkin-result').innerHTML = `
+      <p style="font-size:1.2em">${result.alreadyCheckedIn ? 'Already checked in' : 'Checked in ✓'}</p>
+      <h3>${esc(r.attendee_name)}</h3>
+      <p class="muted">${esc(r.attendee_email)} · <span class="pill ${r.status}">${r.status}</span></p>
+      <a href="#/registrations/${r.id}" class="small">View full record</a>
+    `;
+  } catch (e) {
+    c.querySelector('#checkin-result').innerHTML = `<p class="error">${esc(e.message)}</p>`;
+  }
   return c;
 }
 
@@ -486,10 +542,19 @@ async function viewAlerts() {
 
 // ---------------- Router ----------------
 async function render() {
-  if (!ME) { renderLogin(); return; }
   const hash = location.hash || '#/dashboard';
   const parts = hash.slice(2).split('/'); // e.g. ['events','12']
   let route = parts[0] || 'dashboard';
+
+  // Door check-in is reachable by scanning a QR code even if the session cookie has expired
+  // mid-event, so it's handled before the ME-gate below and re-prompts for login if needed.
+  if (route === 'checkin' && parts[1]) {
+    if (!ME) { renderLogin(); return; }
+    renderShell('checkin', await viewCheckin(decodeURIComponent(parts[1])));
+    return;
+  }
+
+  if (!ME) { renderLogin(); return; }
   let content, active = route;
 
   try {
