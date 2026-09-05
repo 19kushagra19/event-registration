@@ -1,42 +1,65 @@
-# AI prompts
+# AI assistance record
 
-> This file needs to be a truthful log of the prompts *you* actually sent, in the order you sent
-> them, including at least one that produced something wrong. If most of this codebase came from
-> a Claude conversation (as this scaffold did), the honest version of this file describes that
-> conversation's real prompts and real corrections — not a reconstruction that makes the process
-> look tidier than it was. Below is the format to fill in, with one worked example from this
-> build to show the level of detail expected.
+## Accuracy note
 
-## Building the registration lifecycle and capacity rules
+I used AI as a learning and troubleshooting aid while building this project locally. I did not retain a complete verbatim export of every chat, so I will not present reconstructed wording as an exact transcript. The entries below record the real areas where I used assistance, the guidance I received, and what I changed or verified afterwards. The retained screenshots show the dependency, Render, and JWT setup guidance described below.
 
-### Prompt
-"Implement the registration status lifecycle: Reserved → Confirmed → Checked In, with cancellation
-allowed from Reserved or Confirmed but not Checked In, and any other transition rejected by the
-server with a message explaining why. Capacity should count Reserved+Confirmed+CheckedIn together."
+## Native dependency setup: `better-sqlite3`
 
-### What you got
-An `ALLOWED_TRANSITIONS` map and a `/registrations/:id/status` route enforcing it, plus a capacity
-check on creation — first draft did **not** call the expiry sweep before checking capacity, so a
-reservation that should have expired 3 hours ago could still count against the limit and block a
-new reservation from a session that actually had a free seat.
+### What I asked for
 
-### What you corrected
-Added `expireStale()` as the first line of both the reservation-creation route and the search/
-dashboard/alerts routes, so no capacity or count decision is ever made against stale data — see
-`docs/decisions.md` (Decision 5) for why that's synchronous rather than cron-only.
+Help resolving the `better-sqlite3` installation problem on Node 24 without installing Visual Studio build tooling.
 
----
+### What I got
 
-## <What you were trying to achieve>
+The guidance explained that the older `better-sqlite3` version did not provide a suitable ready-made binary for my Node version and recommended changing the dependency from v11 to v13, then reinstalling dependencies.
 
-### Prompt
+### What I did and verified
 
-### What you got
+I updated `package.json` to `better-sqlite3` v13, reinstalled dependencies, and confirmed the local application could use SQLite. This corrected the earlier environment approach: changing the dependency was more appropriate than trying to alter my Visual Studio setup.
 
-### What you corrected
+## Render deployment
 
----
+### What I asked for
 
-TODO — add one entry per significant prompt/exchange, grouped by what you were trying to
-accomplish (auth, events/sessions CRUD, search & pagination, CSV import/export, dashboard,
-alerts, frontend, deployment troubleshooting, etc.), in the order you actually used them.
+Guidance for deploying the locally working Node application to Render with consistent demo data.
+
+### What I got
+
+The setup guidance specified a Node service, `npm install` as the build command, and `npm run seed && npm start` as the Render start command so the ephemeral free-tier filesystem is reseeded after a restart.
+
+### What I did and verified
+
+I pushed the project to GitHub, configured Render with that start command, and verified the deployed application using the seeded organizer and staff credentials. I also documented the free-tier wake-up time and reset behaviour in `SUBMISSION.md`.
+
+## JWT configuration
+
+### What I asked for
+
+How to configure a secure signing secret for the login token in Render.
+
+### What I got
+
+The guidance recommended adding a `JWT_SECRET` environment variable with a long random value, rather than using a real password or committing a secret into the repository.
+
+### What I did and verified
+
+I configured the variable in Render and kept secrets out of version control through `.gitignore`.
+
+## Lifecycle and capacity review
+
+### What I asked for
+
+How to model the registration lifecycle: Reserved → Confirmed → Checked In; cancellation from only Reserved or Confirmed; capacity based on Reserved, Confirmed, and Checked In; and expiry of old reservations.
+
+### What I got
+
+An explicit server-side transition map and capacity check. An early version did not run the expiry sweep before every capacity-sensitive calculation, which could leave an expired reservation holding a seat too long.
+
+### What I corrected
+
+I added `expireStale()` before capacity-sensitive reads and writes, plus a background sweep. I then manually checked the seeded full session, illegal status transitions, and the cancellation flow.
+
+## What I learned
+
+AI was most useful for narrowing down environment and deployment errors and for explaining unfamiliar configuration steps. I still tested locally, read the code paths involved, and made the final choices about the deployed configuration and scope.

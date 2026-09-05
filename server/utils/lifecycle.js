@@ -13,7 +13,7 @@ function expireStale() {
     WHERE status = 'Reserved' AND reserved_at <= datetime('now', ?)
   `).all(cutoff);
 
-  const updateStmt = db.prepare(`UPDATE registrations SET status = 'Expired', updated_at = datetime('now') WHERE id = ?`);
+  const updateStmt = db.prepare(`UPDATE registrations SET status = 'Expired', updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now') WHERE id = ?`);
   const historyStmt = db.prepare(`INSERT INTO registration_history (registration_id, old_status, new_status, changed_by, note) VALUES (?,?,?,?,?)`);
 
   const tx = db.transaction((rows) => {
@@ -46,7 +46,11 @@ function recomputeFullness(sessionId) {
   const isFull = count >= session.capacity;
 
   if (isFull && !session.currently_full) {
-    db.prepare(`UPDATE sessions SET currently_full = 1, last_full_at = datetime('now') WHERE id = ?`).run(sessionId);
+    db.prepare(`UPDATE sessions
+      SET currently_full = 1,
+          last_full_at = strftime('%Y-%m-%d %H:%M:%f', 'now'),
+          full_generation = full_generation + 1
+      WHERE id = ?`).run(sessionId);
   } else if (!isFull && session.currently_full) {
     db.prepare(`UPDATE sessions SET currently_full = 0 WHERE id = ?`).run(sessionId);
   }

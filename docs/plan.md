@@ -1,40 +1,24 @@
-# Plan
+# Build plan and delivery notes
 
-> This file is meant to be an honest record of your own working sessions — a reviewer will match
-> it against the actual commit timestamps in `git log`. Below is the structure to fill in, plus
-> the shape the initial build (this conversation) actually took, which you can use as your first
-> 1-2 sessions if that's really how you worked, and should otherwise replace with what you did.
+## How I split the work
 
-## How did you break the work into sessions?
+I worked in focused local-development sessions of roughly 3–4 hours per day. I deliberately built the data model and server rules before the interface, because the registration lifecycle and capacity rules are the most important correctness risks in this assignment.
 
-TODO — e.g. "Session 1: schema + auth + role middleware. Session 2: events/sessions CRUD.
-Session 3: registration lifecycle + capacity + expiry (the trickiest part). Session 4: search,
-bulk CSV import/export. Session 5: dashboard + alerts. Session 6: frontend wiring. Session 7:
-deploy + docs + seed data + polish."
+1. **Project setup and data model.** Set up Node/Express, SQLite, the schema, seed data, and email/password login with organizer and staff roles.
+2. **Core event operations.** Built event and session CRUD, then staff-to-session assignments and server-side access checks.
+3. **Registration lifecycle.** Added reservation, confirmation, check-in, cancellation, expiry, capacity counting, and append-only history.
+4. **Operational features.** Added registration search, server-side pagination and filters, CSV import/export, dashboard metrics, and capacity alerts.
+5. **Frontend and verification.** Connected the SPA to every API flow and tested the seeded organizer and staff accounts locally.
+6. **Deployment and documentation.** Pushed the local project to GitHub and deployed the same app to Render. I completed this final deployment stage on the final day.
 
-## What order did you build in, and why that order?
+## Why I used this order
 
-The build in this repo went: **schema & auth → events/sessions CRUD → registration lifecycle
-(reserve/confirm/cancel/check-in + capacity enforcement + expiry) → staff assignment & visibility
-→ search/filter/pagination → bulk CSV import/export → dashboard → alerts → frontend → docs/seed**.
+The state machine and capacity rule were built before search, dashboard, import, and alerts because all of those features depend on a reliable definition of an active registration. Building the UI after the API also meant the browser could stay a thin client: it displays fresh server results rather than deciding permissions, capacity, or lifecycle transitions itself.
 
-The reasoning: everything else depends on knowing what a "registration" is and what states it can
-be in, so that lifecycle was built and manually reasoned through before anything that *reads*
-registrations (search, dashboard, alerts) — building the read-heavy features first would have
-meant redoing them once the status rules solidified. Frontend came last on purpose, once every
-API contract it needed to call already existed and had been exercised.
+## Estimate versus actual effort
 
-TODO — replace with your own actual order if you built it differently, or confirm this matches.
+The brief suggested about 12 hours. I spent more than that, working 3–4 hours daily while learning and building side by side. I did not keep a precise feature-by-feature time log, so I do not want to invent one after the fact. The parts that took noticeably longer than expected were the local environment setup and deployment: resolving the `better-sqlite3` compatibility issue with Node 24, understanding npm install-script approval, setting up Git on Windows, and configuring Render to seed demo data on service startup.
 
-## What did you estimate versus what it actually took?
+## Scope I deliberately left out
 
-TODO — this needs your own numbers. Be specific: which of the 10 goals took longer than expected,
-and why (the registration lifecycle + capacity race + alert-reappearance logic is the most likely
-candidate — it's the one place where getting the rules exactly right required re-reading the brief
-several times).
-
-## What did you cut when you ran short?
-
-TODO — if you ran out of time, say what you deliberately left thin (e.g. limited UI polish,
-no automated test suite, no email notifications from the stretch list) and why that was the right
-thing to cut rather than one of the 10 required goals.
+I prioritised the ten required goals over stretch features. I did not build email notifications, QR badges, a waitlist, a public registration site, speakers, sponsors, payments, or post-event surveys. I also cut an automated test suite because of time; this is the first improvement I would make next, especially around expiry, capacity, and alert reappearance.

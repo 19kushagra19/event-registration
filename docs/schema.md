@@ -13,7 +13,8 @@
 **sessions** — `id` PK, `event_id` INTEGER NOT NULL FK → events(id) ON DELETE CASCADE,
 `title` TEXT NOT NULL, `start_time` TEXT NOT NULL, `duration_minutes` INTEGER NOT NULL,
 `location` TEXT NOT NULL, `capacity` INTEGER NOT NULL CHECK (capacity > 0),
-`last_full_at` TEXT NULL, `currently_full` INTEGER NOT NULL DEFAULT 0, `created_at` TEXT.
+`last_full_at` TEXT NULL, `currently_full` INTEGER NOT NULL DEFAULT 0,
+`full_generation` INTEGER NOT NULL DEFAULT 0, `created_at` TEXT.
 
 **staff_assignments** — `id` PK, `user_id` INTEGER NOT NULL FK → users(id) ON DELETE CASCADE,
 `session_id` INTEGER NOT NULL FK → sessions(id) ON DELETE CASCADE, `created_at` TEXT,
@@ -31,7 +32,8 @@ ON DELETE CASCADE, `old_status` TEXT NULL, `new_status` TEXT NOT NULL, `changed_
 Append-only: no route ever issues an UPDATE or DELETE against this table.
 
 **dismissed_alerts** — `session_id` INTEGER PK, FK → sessions(id) ON DELETE CASCADE,
-`dismissed_at` TEXT NOT NULL default now. One row per session, upserted on each dismissal.
+`dismissed_at` TEXT NOT NULL default now, `dismissed_generation` INTEGER NOT NULL DEFAULT 0.
+One row per session, upserted on each dismissal.
 
 ## Relationships
 
@@ -65,14 +67,16 @@ scale.
 
 ## What I deliberately denormalised
 
-`sessions.currently_full` and `sessions.last_full_at` are redundant — both are derivable at any
+`sessions.currently_full`, `sessions.last_full_at`, and `sessions.full_generation` are redundant — all are derivable at any
 moment from `COUNT(*) ... WHERE status IN (...)` against `registrations`. I stored them anyway
 because the alert-reappearance rule (goal #10) needs to know *when* a session last transitioned
 into "full," not just whether it's full right now, and recomputing that from history on every
 `/alerts` request would mean scanning `registration_history` for transition points on every page
 load. Trading a small amount of write-time bookkeeping (updated in `recomputeFullness()`
 whenever a registration's status changes) for a cheap read was the right side of that trade for a
-value that's read far more often than it changes.
+value that's read far more often than it changes. `full_generation` increments each time a session
+enters the full state, while `dismissed_alerts.dismissed_generation` records the full state that was
+dismissed. This makes alert reappearance exact even when multiple actions share a timestamp.
 
 ## What would break first at 100x the data
 

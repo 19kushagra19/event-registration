@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   -- up to capacity; used to decide whether a dismissed alert should reappear.
   last_full_at TEXT,
   currently_full INTEGER NOT NULL DEFAULT 0,
+  full_generation INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -79,8 +80,18 @@ CREATE TABLE IF NOT EXISTS registration_history (
 
 CREATE TABLE IF NOT EXISTS dismissed_alerts (
   session_id INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
-  dismissed_at TEXT NOT NULL DEFAULT (datetime('now'))
+  dismissed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  dismissed_generation INTEGER NOT NULL DEFAULT 0
 );
 `);
+
+// Lightweight forward-only migrations for databases created before the alert-generation fields
+// were introduced. A generation counter avoids depending on second-level timestamp precision.
+function addColumnIfMissing(table, column, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!columns.some(c => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+}
+addColumnIfMissing('sessions', 'full_generation', 'full_generation INTEGER NOT NULL DEFAULT 0');
+addColumnIfMissing('dismissed_alerts', 'dismissed_generation', 'dismissed_generation INTEGER NOT NULL DEFAULT 0');
 
 module.exports = db;

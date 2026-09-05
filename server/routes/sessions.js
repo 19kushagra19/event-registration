@@ -2,7 +2,7 @@ const express = require('express');
 const db = require('../db');
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
-const { activeCount, expireStale } = require('../utils/lifecycle');
+const { activeCount, expireStale, recomputeFullness } = require('../utils/lifecycle');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -36,6 +36,7 @@ router.post('/', requireRole('organizer'), (req, res) => {
 });
 
 router.put('/:id', requireRole('organizer'), (req, res) => {
+  expireStale();
   const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   const { title, start_time, duration_minutes, location, capacity } = req.body || {};
@@ -48,12 +49,20 @@ router.put('/:id', requireRole('organizer'), (req, res) => {
     title ?? session.title, start_time ?? session.start_time, duration_minutes ?? session.duration_minutes,
     location ?? session.location, capacity ?? session.capacity, session.id
   );
+  recomputeFullness(session.id);
   res.json({ session: withCounts(db.prepare('SELECT * FROM sessions WHERE id = ?').get(session.id)) });
 });
 
 router.delete('/:id', requireRole('organizer'), (req, res) => {
+  const session = db.prepare('SELECT id FROM sessions WHERE id = ?').get(req.params.id);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  const registrations = db.prepare('SELECT COUNT(*) AS count FROM registrations WHERE session_id = ?').get(session.id).count;
+  if (registrations) {
+    return res.status(409).json({
+      error: 'This session has registrations and cannot be deleted because their immutable history must be retained.'
+    });
+  }
   const result = db.prepare('DELETE FROM sessions WHERE id = ?').run(req.params.id);
-  if (!result.changes) return res.status(404).json({ error: 'Session not found' });
   res.json({ ok: true });
 });
 

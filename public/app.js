@@ -366,7 +366,11 @@ async function viewRegistrationDetail(id) {
 // ---------------- Find registrations ----------------
 async function viewRegistrationsSearch() {
   const events = await api('/events?includeArchived=1').catch(() => api('/events'));
-  const state = { q: '', status: '', event_id: '', sort: 'reserved_at', dir: 'desc', page: 1 };
+  const sessionsByEvent = Object.fromEntries(await Promise.all(events.events.map(async event => {
+    const detail = await api(`/events/${event.id}`);
+    return [event.id, detail.sessions];
+  })));
+  const state = { q: '', status: '', event_id: '', session_id: '', sort: 'reserved_at', dir: 'desc', page: 1 };
 
   const c = el(`<div>
     <h2>Find registrations</h2>
@@ -382,6 +386,9 @@ async function viewRegistrationsSearch() {
           <select id="f-event"><option value="">Any</option>
             ${events.events.map(e => `<option value="${e.id}">${esc(e.name)}</option>`).join('')}
           </select>
+        </div>
+        <div class="field"><label>Session</label>
+          <select id="f-session"><option value="">Any</option></select>
         </div>
         <button id="f-apply">Search</button>
       </div>
@@ -402,7 +409,7 @@ async function viewRegistrationsSearch() {
   </div>`);
 
   async function refresh() {
-    const params = new URLSearchParams({ q: state.q, status: state.status, event_id: state.event_id, sort: state.sort, dir: state.dir, page: state.page, pageSize: 15 });
+    const params = new URLSearchParams({ q: state.q, status: state.status, event_id: state.event_id, session_id: state.session_id, sort: state.sort, dir: state.dir, page: state.page, pageSize: 15 });
     const d = await api('/registrations?' + params.toString());
     c.querySelector('#results').innerHTML = d.registrations.map(r => `
       <tr>
@@ -421,8 +428,15 @@ async function viewRegistrationsSearch() {
     state.q = c.querySelector('#f-q').value;
     state.status = c.querySelector('#f-status').value;
     state.event_id = c.querySelector('#f-event').value;
+    state.session_id = c.querySelector('#f-session').value;
     state.page = 1;
     refresh();
+  };
+  c.querySelector('#f-event').onchange = () => {
+    const selected = c.querySelector('#f-event').value;
+    const sessions = selected ? sessionsByEvent[selected] : Object.values(sessionsByEvent).flat();
+    c.querySelector('#f-session').innerHTML = '<option value="">Any</option>' +
+      sessions.map(s => `<option value="${s.id}">${esc(s.title)}</option>`).join('');
   };
   c.querySelectorAll('th[data-sort]').forEach(th => th.onclick = () => {
     const key = th.dataset.sort;

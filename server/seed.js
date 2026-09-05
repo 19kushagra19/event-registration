@@ -40,7 +40,7 @@ function addReg(sessionId, name, email, status) {
 addReg(s1.lastInsertRowid, 'Alice Chen', 'alice@example.com', 'Confirmed');
 addReg(s1.lastInsertRowid, 'Ben Torres', 'ben@example.com', 'CheckedIn');
 addReg(s1.lastInsertRowid, 'Cara Diaz', 'cara@example.com', 'Reserved');
-db.prepare(`UPDATE sessions SET currently_full = 1, last_full_at = datetime('now') WHERE id = ?`).run(s1.lastInsertRowid);
+db.prepare(`UPDATE sessions SET currently_full = 1, last_full_at = datetime('now'), full_generation = 1 WHERE id = ?`).run(s1.lastInsertRowid);
 
 addReg(s2.lastInsertRowid, 'Dan Ford', 'dan@example.com', 'Confirmed');
 addReg(s3.lastInsertRowid, 'Eve Grant', 'eve@example.com', 'Reserved');

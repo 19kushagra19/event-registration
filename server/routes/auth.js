@@ -1,28 +1,13 @@
 const express = require('express');
 const db = require('../db');
-const { hashPassword, checkPassword, issueToken } = require('../auth');
+const { checkPassword, issueToken } = require('../auth');
 const requireAuth = require('../middleware/requireAuth');
 
 const router = express.Router();
 
-// Deliberately no public self-signup: accounts for this system are provisioned by
-// whoever runs the org (mirrors how the real event-ops team would onboard staff).
-// The /register endpoint below is used only by the seed script; see docs/decisions.md.
-router.post('/register', (req, res) => {
-  const { email, password, name, role } = req.body || {};
-  if (!email || !password || !name || !['organizer', 'staff'].includes(role)) {
-    return res.status(400).json({ error: 'email, password, name and role (organizer|staff) are required' });
-  }
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-  if (existing) return res.status(409).json({ error: 'Email already registered' });
-
-  const info = db.prepare('INSERT INTO users (email, password_hash, name, role) VALUES (?,?,?,?)')
-    .run(email, hashPassword(password), name, role);
-  const user = { id: info.lastInsertRowid, email, name, role };
-  const token = issueToken(user);
-  res.cookie('token', token, { httpOnly: true, sameSite: 'lax', maxAge: 7 * 24 * 3600 * 1000 });
-  res.status(201).json({ user });
-});
+// Accounts are provisioned directly by the organisation (the seed script does this for the
+// demo). There is intentionally no public registration endpoint: otherwise any unauthenticated
+// caller could create an organizer account.
 
 router.post('/login', (req, res) => {
   const { email, password } = req.body || {};

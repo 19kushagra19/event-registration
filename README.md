@@ -76,7 +76,7 @@ browser (public/app.js)
       v
 Express app (server/index.js)
       |
-      +- /api/auth          -> server/routes/auth.js         (login/logout/register/me)
+      +- /api/auth          -> server/routes/auth.js         (login/logout/me)
       +- /api/events         -> server/routes/events.js        (event CRUD)
       +- /api/sessions        -> server/routes/sessions.js       (session CRUD)
       +- /api/staff             -> server/routes/staff.js           (assign/unassign, my-sessions)
@@ -117,7 +117,7 @@ event-registration/
 │   │   ├── requireAuth.js            # reads+verifies the JWT cookie, sets req.user
 │   │   └── requireRole.js             # e.g. requireRole('organizer')
 │   ├── routes/
-│   │   ├── auth.js                      # POST /register, /login, /logout · GET /me
+│   │   ├── auth.js                      # POST /login, /logout · GET /me
 │   │   ├── events.js                     # GET/POST /events · GET/PUT /events/:id · archive/restore
 │   │   ├── sessions.js                    # GET/POST /sessions · GET/PUT/DELETE /sessions/:id
 │   │   ├── staff.js                        # POST assign/unassign · GET my-sessions, list
@@ -238,14 +238,13 @@ All optional — sane defaults for local dev.
 
 ## API reference
 
-All routes below are prefixed with `/api`. All routes except `/auth/login` and `/auth/register`
-require the auth cookie (set automatically after login). Routes marked [organizer only] also
+All routes below are prefixed with `/api`. All routes except `/auth/login` require the auth cookie
+(set automatically after login). Routes marked [organizer only] also
 require the `organizer` role.
 
 **Auth** (`server/routes/auth.js`)
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/auth/register` | Used by `seed.js`; no public signup in the UI |
 | POST | `/auth/login` | `{email, password}` -> sets the auth cookie |
 | POST | `/auth/logout` | Clears the cookie |
 | GET | `/auth/me` | Returns the current user |
