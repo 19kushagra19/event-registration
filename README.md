@@ -29,7 +29,7 @@ write-up and `SUBMISSION.md` for links/credentials/checklist).
 
 ## What it does
 
-Ten required capabilities, all implemented:
+Ten required capabilities, all implemented, plus one stretch feature (#11):
 
 1. **Accounts and roles** — email/password login, two roles (organizer, staff), every
    organizer-only action re-checked server-side, not just hidden in the UI.
@@ -49,9 +49,18 @@ Ten required capabilities, all implemented:
 8. **Dashboard** — headline numbers (sessions today, checked in today, expired this week,
    sessions at capacity), breakdowns by status and by session, and a 14-day check-in chart.
 9. **Immutable audit trail** — every registration has a timeline of every status change (old →
-   new, who, when) plus free-text notes; nothing in it can ever be edited or deleted.
+   new, who, when) plus free-text notes; nothing in it can ever be edited or deleted, and the
+   guarantee is checkable, not just asserted: each history row is SHA-256 hash-chained to the one
+   before it, and `GET /api/registrations/:id/verify` walks the chain and reports any tampering.
 10. **At-capacity alerts** — a session that fills shows up in an alerts list with a nav badge;
     dismissing it clears it, but it reappears if the session empties and refills to capacity again.
+
+**Beyond the required ten**, one stretch feature is also implemented:
+
+11. **QR door check-in** — a Reserved/Confirmed registration's detail page shows a signed, expiring
+    QR code (`GET /api/registrations/:id/qrcode`); scanning it (or opening the encoded link) hits
+    `POST /api/checkin/scan`, which fast-tracks the attendee straight to `CheckedIn` — reusing the
+    same transition rules as goal #4, not a separate code path — and is idempotent on repeat scans.
 
 ## Tech stack
 
@@ -75,7 +84,7 @@ On the server, `server/index.js` wires everything together:
 browser (public/app.js)
       |  fetch('/api/...')
       v
-Express app (server/index.js)
+Express app (server/app.js, entrypoint server/index.js)
       |
       +- /api/auth          -> server/routes/auth.js         (login/logout/me)
       +- /api/events         -> server/routes/events.js        (event CRUD)
@@ -85,7 +94,9 @@ Express app (server/index.js)
       +- /api/alerts              -> server/routes/alerts.js           (at-capacity list, dismiss)
       +- /api (registrations)      -> server/routes/registrations.js   (reserve/confirm/cancel/
                                                                           check-in, search, CSV
-                                                                          import/export, timeline)
+                                                                          import/export, timeline,
+                                                                          hash-chain verify)
+      +- /api (checkin)              -> server/routes/checkin.js         (QR code, scan)
       |
       +- server/middleware/requireAuth.js   - verifies the JWT cookie, attaches req.user
       +- server/middleware/requireRole.js    - blocks organizer-only routes for staff
@@ -286,6 +297,13 @@ require the `organizer` role.
 | GET | `/registrations` | Search: `q`, `event_id`, `session_id`, `status`, `sort`, `dir`, `page`, `pageSize` — all server-side |
 | POST | `/sessions/:sessionId/import` [organizer only] | Multipart CSV upload (`file` field, columns `name,email`); returns a per-row report |
 | GET | `/sessions/:sessionId/export` | Downloads the session's check-in sheet as CSV |
+| GET | `/registrations/:id/verify` | Walks the hash-chained history and reports `{valid, checked}` or `{valid: false, brokenAt, reason}` |
+
+**QR check-in** (`server/routes/checkin.js`)
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/registrations/:id/qrcode` | Returns a PNG QR code encoding a signed, expiring check-in link; 400 if the registration isn't Reserved/Confirmed |
+| POST | `/checkin/scan` | `{token}`; fast-tracks the registration to `CheckedIn`, idempotent on repeat scans |
 
 **Dashboard / Alerts**
 | Method | Path | Notes |
