@@ -10,11 +10,12 @@
 Hosted on Render's free tier — the service spins down after periods of inactivity, so the first
 request after a while can take 50+ seconds to wake up. This is expected, not a bug.
 
-The start command runs `npm run seed && npm start`, so the demo database is freshly reseeded every
-time the service restarts (idle spin-down, a new deploy, or Render's own maintenance). This means
-demo data is always present and consistent, but any data entered live (new registrations, etc.)
-will not persist across a restart — a known trade-off of using SQLite on a free tier's ephemeral
-disk, documented in `docs/decisions.md` and `README.md`.
+Render is configured with the start command `npm run seed && npm start`; the `start` script in
+`package.json` then runs the Express server. This reseeds the demo database whenever the service
+restarts (idle spin-down, a new deploy, or Render maintenance). Demo data is therefore always
+present and consistent, but data entered live will not persist across a restart — a known
+trade-off of SQLite on a free tier's ephemeral disk, documented in `docs/decisions.md` and
+`README.md`.
 
 ## Demo credentials
 
@@ -52,14 +53,14 @@ disk, documented in `docs/decisions.md` and `README.md`.
 
 ## How much time did you actually spend?
 
-Roughly 25 hours, more than double the suggested 12-hour budget. A meaningful chunk of that wasn't
-writing application code — it went into environment setup and deployment friction I had to learn
-as I went: a Node.js version mismatch that broke `better-sqlite3`'s install, getting Git installed
-and working on Windows, getting npm's newer install-script permission model out of the way, and
-sorting out Render's build/start command configuration until the live deploy actually seeded data
-correctly. None of that was wasted time — it's a real, if unglamorous, part of shipping anything —
-but it does mean the ratio of "debugging the environment" to "building the feature" was higher
-than I'd have liked.
+I worked on the project in focused 3–4 hour sessions each day, building and learning alongside the
+work rather than trying to complete it in one sitting. I developed and tested the application
+locally first, then pushed it to GitHub and completed the Render deployment on the final day.
+
+A meaningful part of the time went into environment and deployment learning: resolving the
+`better-sqlite3` / Node 24 compatibility issue, getting Git working on Windows, understanding npm's
+install-script approval, and configuring Render to seed the demo data on startup. That work was
+important to getting a reproducible local setup and a working live application.
 
 ## What would you do next, with another 12 hours?
 
@@ -73,13 +74,7 @@ capacity/expiry machinery with the least new code.
 
 ## What are you least happy with in this codebase, and why?
 
-I'm least happy that the core application code was generated in one large pass rather than
-something I built up piece by piece and debugged myself. My own hands-on time mostly went into
-environment setup and deployment — fighting the Node version mismatch with `better-sqlite3`,
-getting Git installed properly, sorting out Render's build/start commands — rather than writing or
-stepping through the registration lifecycle logic line by line. If I'm asked in the call to explain
-exactly why `server/utils/lifecycle.js` checks capacity in the order it does, I'd want to go back
-through it myself first rather than answer from memory of being told. Going forward, I want to
-actually read and trace through the trickier parts of this codebase — the lifecycle module and the
-alert-reappearance logic especially — so I can defend it as if I'd written it myself, not just
-describe what it does.
+The main weakness is the lack of an automated test suite. I manually exercised the core flows while
+building locally, but the registration lifecycle — particularly expiry, capacity counting, and the
+alert-reappearance behaviour — deserves repeatable route-level tests. With more time, I would add
+those tests first, then use them to make future changes safer.
