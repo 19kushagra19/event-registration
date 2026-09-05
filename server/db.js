@@ -68,6 +68,8 @@ CREATE INDEX IF NOT EXISTS idx_reg_status ON registrations(status);
 CREATE INDEX IF NOT EXISTS idx_reg_email ON registrations(attendee_email);
 
 -- Append-only audit trail. No UPDATE/DELETE is ever issued against this table by app code.
+-- hash/prev_hash turn "no route can edit this" from a policy into something verifiable:
+-- see server/utils/history.js and GET /api/registrations/:id/verify.
 CREATE TABLE IF NOT EXISTS registration_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   registration_id INTEGER NOT NULL REFERENCES registrations(id) ON DELETE CASCADE,
@@ -75,7 +77,9 @@ CREATE TABLE IF NOT EXISTS registration_history (
   new_status TEXT NOT NULL,
   changed_by TEXT,
   note TEXT,
-  changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+  changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  prev_hash TEXT,
+  hash TEXT
 );
 
 CREATE TABLE IF NOT EXISTS dismissed_alerts (
@@ -93,5 +97,7 @@ function addColumnIfMissing(table, column, definition) {
 }
 addColumnIfMissing('sessions', 'full_generation', 'full_generation INTEGER NOT NULL DEFAULT 0');
 addColumnIfMissing('dismissed_alerts', 'dismissed_generation', 'dismissed_generation INTEGER NOT NULL DEFAULT 0');
+addColumnIfMissing('registration_history', 'prev_hash', 'prev_hash TEXT');
+addColumnIfMissing('registration_history', 'hash', 'hash TEXT');
 
 module.exports = db;

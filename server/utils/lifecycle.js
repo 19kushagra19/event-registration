@@ -1,4 +1,5 @@
 const db = require('../db');
+const { recordHistory } = require('./history');
 
 const HOLD_MINUTES = parseInt(process.env.HOLD_MINUTES || '30', 10);
 const ACTIVE_STATUSES = ['Reserved', 'Confirmed', 'CheckedIn'];
@@ -14,12 +15,11 @@ function expireStale() {
   `).all(cutoff);
 
   const updateStmt = db.prepare(`UPDATE registrations SET status = 'Expired', updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now') WHERE id = ?`);
-  const historyStmt = db.prepare(`INSERT INTO registration_history (registration_id, old_status, new_status, changed_by, note) VALUES (?,?,?,?,?)`);
 
   const tx = db.transaction((rows) => {
     for (const r of rows) {
       updateStmt.run(r.id);
-      historyStmt.run(r.id, r.status, 'Expired', 'system', `Auto-expired after ${HOLD_MINUTES} min hold window`);
+      recordHistory(r.id, r.status, 'Expired', 'system', `Auto-expired after ${HOLD_MINUTES} min hold window`);
       recomputeFullness(r.session_id);
     }
   });

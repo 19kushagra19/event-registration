@@ -7,6 +7,7 @@ const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 const { expireStale, activeCount, recomputeFullness, ACTIVE_STATUSES } = require('../utils/lifecycle');
 const { canActOnSession, visibleSessionIds } = require('../utils/access');
+const { recordHistory, verifyChain } = require('../utils/history');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -22,11 +23,19 @@ const ALLOWED_TRANSITIONS = {
   Expired: [],
 };
 
-function recordHistory(registrationId, oldStatus, newStatus, changedBy, note) {
-  db.prepare(`
-    INSERT INTO registration_history (registration_id, old_status, new_status, changed_by, note)
-    VALUES (?,?,?,?,?)
-  `).run(registrationId, oldStatus, newStatus, changedBy, note || null);
+// ALLOWED_TRANSITIONS + this function are exported so server/routes/checkin.js (QR check-in)
+// can reuse the exact same state machine instead of a parallel copy of it.
+function applyTransition(reg, target, changedBy, note) {
+  const allowed = ALLOWED_TRANSITIONS[reg.status] || [];
+  if (!allowed.includes(target)) {
+    const err = new Error(`Cannot move a registration from '${reg.status}' to '${target}'. Allowed next states: ${allowed.length ? allowed.join(', ') : 'none (this is a final state)'}.`);
+    err.status = 400;
+    throw err;
+  }
+  db.prepare(`UPDATE registrations SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(target, reg.id);
+  recordHistory(reg.id, reg.status, target, changedBy, note);
+  recomputeFullness(reg.session_id);
+  return db.prepare('SELECT * FROM registrations WHERE id = ?').get(reg.id);
 }
 
 // ---- Create (Reserve) ----
@@ -63,18 +72,20 @@ router.post('/registrations/:id/status', (req, res) => {
   if (!canActOnSession(req.user, reg.session_id)) return res.status(403).json({ error: 'Not assigned to this session' });
 
   const { status: target, note } = req.body || {};
-  const allowed = ALLOWED_TRANSITIONS[reg.status] || [];
-  if (!allowed.includes(target)) {
-    return res.status(400).json({
-      error: `Cannot move a registration from '${reg.status}' to '${target}'. Allowed next states: ${allowed.length ? allowed.join(', ') : 'none (this is a final state)'}.`
-    });
+  try {
+    const registration = applyTransition(reg, target, req.user.email, note);
+    res.json({ registration });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
   }
+});
 
-  db.prepare(`UPDATE registrations SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(target, reg.id);
-  recordHistory(reg.id, reg.status, target, req.user.email, note);
-  recomputeFullness(reg.session_id); // Cancel frees a seat; Confirm/CheckedIn keep it held
-
-  res.json({ registration: db.prepare('SELECT * FROM registrations WHERE id = ?').get(reg.id) });
+// ---- Verify a registration's audit trail hasn't been tampered with ----
+router.get('/registrations/:id/verify', (req, res) => {
+  const reg = db.prepare('SELECT * FROM registrations WHERE id = ?').get(req.params.id);
+  if (!reg) return res.status(404).json({ error: 'Registration not found' });
+  if (!canActOnSession(req.user, reg.session_id)) return res.status(403).json({ error: 'Not assigned to this session' });
+  res.json(verifyChain(reg.id));
 });
 
 // ---- Add a free-text note without changing status ----
@@ -216,3 +227,5 @@ router.get('/sessions/:sessionId/export', (req, res) => {
 });
 
 module.exports = router;
+module.exports.ALLOWED_TRANSITIONS = ALLOWED_TRANSITIONS;
+module.exports.applyTransition = applyTransition;

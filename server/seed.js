@@ -1,6 +1,7 @@
 // Wipes and reseeds the database with enough demo data to show the system doing something.
 const db = require('./db');
 const { hashPassword } = require('./auth');
+const { recordHistory } = require('./utils/history');
 
 db.exec(`
   DELETE FROM registration_history; DELETE FROM registrations; DELETE FROM dismissed_alerts;
@@ -27,12 +28,11 @@ db.prepare('INSERT INTO staff_assignments (user_id, session_id) VALUES (?,?)').r
 db.prepare('INSERT INTO staff_assignments (user_id, session_id) VALUES (?,?)').run(staff2.lastInsertRowid, s4.lastInsertRowid);
 
 const insReg = db.prepare("INSERT INTO registrations (session_id, attendee_name, attendee_email, status) VALUES (?,?,?,?)");
-const insHist = db.prepare("INSERT INTO registration_history (registration_id, old_status, new_status, changed_by, note) VALUES (?,?,?,?,?)");
 
 function addReg(sessionId, name, email, status) {
   const r = insReg.run(sessionId, name, email, status);
-  insHist.run(r.lastInsertRowid, null, 'Reserved', 'seed', 'Created');
-  if (status !== 'Reserved') insHist.run(r.lastInsertRowid, 'Reserved', status, 'seed', `Moved to ${status}`);
+  recordHistory(r.lastInsertRowid, null, 'Reserved', 'seed', 'Created');
+  if (status !== 'Reserved') recordHistory(r.lastInsertRowid, 'Reserved', status, 'seed', `Moved to ${status}`);
   return r.lastInsertRowid;
 }
 
